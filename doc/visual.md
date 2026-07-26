@@ -43,3 +43,7 @@ No countdown, score, lives, generic particles, photo replacement, glass cards, b
 ## Vertical-slice Acceptance
 
 At both mobile targets, the first touch wakes the actual renderer, dragging orbits without locking focus, three taps visibly rebuild three focal planes, completion preserves the web, and restart works without refresh.
+
+## Startup Continuity
+
+The critical darkroom bridge paints before the legacy script chain. The sleeping optical surface remains visible after the wake press and changes its label to a focusing state; it may fade only after the first valid accumulated WebGL sample. No fixed-duration splash or premature black frame is allowed.

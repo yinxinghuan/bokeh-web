@@ -30,3 +30,7 @@
 - 调性能：编辑 `public/libs/createScene.js` 的 `drawCallsPerFrame` 与 `public/libs/main.js` 的像素比上限。
 - 换 UI、文案或安全区：编辑 `src/style.css` 与 `src/main.ts`。
 - 加存档或平台事件：在 `applyFocus()` 完成分支接入，不阻塞即时焦面反馈。
+
+## 5. 启动交接
+
+原版依赖脚本从 `<head>` 移到主体末尾，让内联启动桥可以先绘制。入口就绪后启动桥交给休眠面；用户点醒时休眠面保持不动并显示聚焦反馈。`public/libs/main.js` 只在获得有限 `requestAnimationFrame` 时间戳并完成第一次累积输出后调用 `onBlurryFirstFrame()`，事件顺序必须为 `frame-ready → cover-release`。

@@ -31,11 +31,27 @@ var offscreenRT;
 
 // The threejs version used in this repo was modified at line: 23060  to disable frustum culling
 let frames = 0;
+let visualReadySent = false;
+let visualFrameRendered = false;
+let visualAssetsReady = false;
+
+function announceVisualReady() {
+    if(visualReadySent || !visualFrameRendered || !visualAssetsReady) return;
+    visualReadySent = true;
+    if(typeof window.onBlurryFirstFrame === "function") window.onBlurryFirstFrame();
+}
 
 var controls = { };
 
 function init() {    
     if(setGlobals) setGlobals();
+
+    var previousManagerOnLoad = THREE.DefaultLoadingManager.onLoad;
+    THREE.DefaultLoadingManager.onLoad = function() {
+        visualAssetsReady = true;
+        if(typeof previousManagerOnLoad === "function") previousManagerOnLoad();
+        announceVisualReady();
+    };
 
     initCurlNoise();
 
@@ -247,6 +263,8 @@ function render(now) {
     postProcQuadMaterial.uniforms.uExposure.value = exposure;
     postProcQuadMaterial.uniforms.uCameraPosition.value = new THREE.Vector3(camera.position.x, camera.position.y, camera.position.z);
     renderer.render(postProcScene, postProcCamera);
+    if(Number.isFinite(now)) visualFrameRendered = true;
+    announceVisualReady();
 
 
     // used to make GIF animations

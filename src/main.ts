@@ -4,6 +4,7 @@ type LegacyWindow = Window & {
   bokehStrength: number
   resetCanvas: () => void
   renderer: { domElement: HTMLCanvasElement }
+  onBlurryFirstFrame?: () => void
 }
 
 const legacy = window as unknown as LegacyWindow
@@ -17,8 +18,8 @@ const locale = localStorage.getItem('game_locale') === 'en'
   ? 'en'
   : 'zh'
 const copy = locale === 'zh'
-  ? { wake: '触碰唤醒光学网', guide: '轻触校准焦面 · 拖动旋转', done: '三层焦面已锁定 · 拖动观看', restart: '重新校准' }
-  : { wake: 'Touch to wake the optical web', guide: 'Tap to focus · drag to orbit', done: 'Three focal planes locked · drag to inspect', restart: 'Recalibrate' }
+  ? { wake: '触碰唤醒光学网', starting: '光学网正在聚焦…', guide: '轻触校准焦面 · 拖动旋转', done: '三层焦面已锁定 · 拖动观看', restart: '重新校准' }
+  : { wake: 'Touch to wake the optical web', starting: 'Focusing the optical web…', guide: 'Tap to focus · drag to orbit', done: 'Three focal planes locked · drag to inspect', restart: 'Recalibrate' }
 const focalPlanes = [
   { depth: 80, bokeh: 0.016 },
   { depth: 100, bokeh: 0.021 },
@@ -26,6 +27,7 @@ const focalPlanes = [
 ]
 let progress = 0
 let started = false
+let gestureAttached = false
 const baseline = new URLSearchParams(location.search).get('baseline') === '1'
 
 wake.querySelector('span')!.textContent = copy.wake
@@ -46,6 +48,8 @@ function applyFocus(index: number) {
 }
 
 function attachCanvasGesture() {
+  if (gestureAttached) return
+  gestureAttached = true
   const canvas = legacy.renderer.domElement
   let originX = 0
   let originY = 0
@@ -59,14 +63,31 @@ function attachCanvasGesture() {
   })
 }
 
+function releaseBootBridge() {
+  const boot = document.querySelector<HTMLElement>('.boot-bridge')
+  if (!boot || boot.classList.contains('is-ready')) return
+  boot.classList.add('is-ready')
+  window.setTimeout(() => boot.remove(), 420)
+}
+
+legacy.onBlurryFirstFrame = () => {
+  document.body.dataset.visualReady = 'true'
+  wake.removeAttribute('aria-busy')
+  sleeping.classList.add('is-awake')
+  attachCanvasGesture()
+}
+
 function startExperience() {
   if (started) return
   started = true
+  wake.querySelector('span')!.textContent = copy.starting
+  wake.setAttribute('aria-busy', 'true')
   try {
     legacy.startBlurry()
-    sleeping.classList.add('is-awake')
-    attachCanvasGesture()
   } catch {
+    started = false
+    wake.removeAttribute('aria-busy')
+    wake.querySelector('span')!.textContent = copy.wake
     guide.textContent = locale === 'zh' ? '此设备不支持所需的 WebGL 浮点渲染' : 'This device cannot run the required WebGL float renderer'
     guide.style.pointerEvents = 'auto'
   }
@@ -78,6 +99,8 @@ if (baseline) {
   document.body.classList.add('is-baseline')
   startExperience()
 }
+
+requestAnimationFrame(() => requestAnimationFrame(releaseBootBridge))
 
 restart.addEventListener('pointerdown', () => {
   progress = 0
