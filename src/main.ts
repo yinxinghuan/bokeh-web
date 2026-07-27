@@ -28,11 +28,21 @@ const focalPlanes = [
 let progress = 0
 let started = false
 let gestureAttached = false
-const baseline = new URLSearchParams(location.search).get('baseline') === '1'
+const params = new URLSearchParams(location.search)
+const baseline = params.get('baseline') === '1'
+const bootDelayMs = Math.min(5000, Math.max(0, Number(params.get('boot_delay')) || 0))
 
-wake.querySelector('span')!.textContent = copy.wake
-guide.textContent = copy.guide
 restart.textContent = copy.restart
+
+function enableWake() {
+  wake.querySelector('span')!.textContent = copy.wake
+  guide.textContent = copy.guide
+  wake.disabled = false
+  wake.removeAttribute('aria-busy')
+}
+
+if (bootDelayMs > 0) window.setTimeout(enableWake, bootDelayMs)
+else enableWake()
 
 function applyFocus(index: number) {
   const plane = focalPlanes[index]
@@ -93,14 +103,17 @@ function startExperience() {
   }
 }
 
-wake.addEventListener('pointerdown', startExperience, { once: true })
+if ('PointerEvent' in window) wake.addEventListener('pointerdown', startExperience, { once: true })
+else wake.addEventListener('click', startExperience, { once: true })
 
 if (baseline) {
   document.body.classList.add('is-baseline')
   startExperience()
 }
 
-requestAnimationFrame(() => requestAnimationFrame(releaseBootBridge))
+// The sleeping surface is already complete DOM. Hand it over as soon as the
+// module executes; Mini App preload WebViews may throttle rAF indefinitely.
+releaseBootBridge()
 
 restart.addEventListener('pointerdown', () => {
   progress = 0

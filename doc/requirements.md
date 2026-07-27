@@ -10,7 +10,7 @@ The original black-red volumetric line web and pentagonal bokeh remain full-scre
 
 ## 3. Game Mechanics
 
-The first intentional pointer starts the renderer. The untouched upstream scene uses 17 spiralling bands, 35 segments per band, 4,500 intersection searches, 5,500 sparkles, and its original multipass accumulation shader. Three valid taps advance focal distance through 80, 100, and 122 world units and bokeh strength through 0.016, 0.021, and 0.027. Each lock resets accumulation so the new plane visibly resolves. No timer, score, or failure state exists.
+The first intentional pointer starts the renderer. The untouched upstream scene uses 17 spiralling bands, 35 segments per band, 4,500 intersection searches, 5,500 sparkles, and its original multipass accumulation shader. Devices with an incomplete floating-point framebuffer, including Mini App WebViews, render the same source scene directly with four stochastic draws per frame instead of remaining behind the loading cover. Three valid taps advance focal distance through 80, 100, and 122 world units and bokeh strength through 0.016, 0.021, and 0.027. Each lock invalidates the current image so the new plane visibly resolves. No timer, score, or failure state exists.
 
 ## 4. Controls
 

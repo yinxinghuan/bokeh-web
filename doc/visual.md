@@ -44,6 +44,16 @@ No countdown, score, lives, generic particles, photo replacement, glass cards, b
 
 At both mobile targets, the first touch wakes the actual renderer, dragging orbits without locking focus, three taps visibly rebuild three focal planes, completion preserves the web, and restart works without refresh.
 
+Mini App acceptance uses the same particle-web geometry, warm/cool lighting and
+pentagonal sprite. When floating accumulation is unavailable, a lower-density
+direct WebGL presentation is allowed, but the optical web, three focus steps and
+completion must remain visible and usable at both mobile targets.
+
 ## Startup Continuity
 
 The critical darkroom bridge paints before the legacy script chain. The sleeping optical surface remains visible after the wake press and changes its label to a focusing state; it may fade only after the first valid accumulated WebGL sample. No fixed-duration splash or premature black frame is allowed.
+
+The initial bridge hands off to the already-painted sleeping surface when the
+module executes; this handoff must not depend exclusively on `requestAnimationFrame`,
+which Mini App preload WebViews may throttle. The post-wake sleeping surface
+still waits for a real accumulated or direct WebGL frame.

@@ -28,6 +28,7 @@ let shaderPassMaterial;
 let samples = 0;
 
 var offscreenRT;
+var useDirectFallback = false;
 
 // The threejs version used in this repo was modified at line: 23060  to disable frustum culling
 let frames = 0;
@@ -42,6 +43,73 @@ function announceVisualReady() {
 }
 
 var controls = { };
+
+function forceDirectRenderer() {
+    var params = new URLSearchParams(window.location.search);
+    var ua = navigator.userAgent || "";
+    return params.get("renderer") === "direct"
+        || /miniProgram|MicroMessenger|miniapp/i.test(ua)
+        || window.__wxjs_environment === "miniprogram";
+}
+
+function canRenderFloatTarget(activeRenderer) {
+    if(forceDirectRenderer()) return false;
+    var gl = activeRenderer.getContext();
+    var isWebGL2 = typeof WebGL2RenderingContext !== "undefined" && gl instanceof WebGL2RenderingContext;
+    if(isWebGL2) {
+        if(!gl.getExtension("EXT_color_buffer_float")) return false;
+    } else {
+        if(!gl.getExtension("OES_texture_float")) return false;
+        if(!gl.getExtension("WEBGL_color_buffer_float") && !gl.getExtension("EXT_color_buffer_float")) return false;
+    }
+
+    var texture = gl.createTexture();
+    var framebuffer = gl.createFramebuffer();
+    if(!texture || !framebuffer) return false;
+    gl.bindTexture(gl.TEXTURE_2D, texture);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 2, 2, 0, gl.RGBA, gl.FLOAT, null);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, framebuffer);
+    gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, texture, 0);
+    var complete = gl.checkFramebufferStatus(gl.FRAMEBUFFER) === gl.FRAMEBUFFER_COMPLETE;
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    gl.bindTexture(gl.TEXTURE_2D, null);
+    gl.deleteFramebuffer(framebuffer);
+    gl.deleteTexture(texture);
+    return complete;
+}
+
+function createFallbackBokehTexture() {
+    var fallback = document.createElement("canvas");
+    fallback.width = 64;
+    fallback.height = 64;
+    var context = fallback.getContext("2d");
+    context.fillStyle = "#fff";
+    context.beginPath();
+    for(var i = 0; i < 5; i++) {
+        var angle = -Math.PI / 2 + i * Math.PI * 2 / 5;
+        var x = 32 + Math.cos(angle) * 29;
+        var y = 32 + Math.sin(angle) * 29;
+        if(i === 0) context.moveTo(x, y);
+        else context.lineTo(x, y);
+    }
+    context.closePath();
+    context.fill();
+    var texture = new THREE.Texture(fallback);
+    texture.needsUpdate = true;
+    return texture;
+}
+
+function loadBokehTexture(path) {
+    if(!useDirectFallback) return new THREE.TextureLoader().load(path);
+    var texture = createFallbackBokehTexture();
+    new THREE.TextureLoader().load(path, function(loaded) {
+        texture.image = loaded.image;
+        texture.needsUpdate = true;
+    });
+    return texture;
+}
 
 function init() {    
     if(setGlobals) setGlobals();
@@ -61,6 +129,8 @@ function init() {
     renderer.autoClear = false;
     document.body.appendChild(renderer.domElement);
     canvas = renderer.domElement;
+    useDirectFallback = !canRenderFloatTarget(renderer);
+    document.body.dataset.bokehRenderer = useDirectFallback ? "direct" : "accumulation";
 
 
     scene           = new THREE.Scene();
@@ -92,18 +162,20 @@ function init() {
 
 
 
-    offscreenRT = new THREE.WebGLRenderTarget(innerWidth, innerHeight, {
-        stencilBuffer: false,
-        depthBuffer: false,
-        type: THREE.FloatType,
-    });
+    if(!useDirectFallback) {
+        offscreenRT = new THREE.WebGLRenderTarget(innerWidth, innerHeight, {
+            stencilBuffer: false,
+            depthBuffer: false,
+            type: THREE.FloatType,
+        });
+    }
 
     var postProcQuadGeo = new THREE.PlaneBufferGeometry(2,2);
     postProcQuadMaterial = new THREE.ShaderMaterial({
         vertexShader: postprocv,
         fragmentShader: postprocf,
         uniforms: {
-            texture: { type: "t", value: offscreenRT.texture },
+            texture: { type: "t", value: offscreenRT ? offscreenRT.texture : null },
             uSamples: { value: samples },
             uExposure: { value: exposure },
             uBackgroundColor: new THREE.Uniform(new THREE.Vector3(backgroundColor[0], backgroundColor[1], backgroundColor[2])),
@@ -152,7 +224,7 @@ function init() {
             uBokehStrength: { value: bokehStrength },
             uMinimumLineSize: { value: minimumLineSize },
             uFocalPowerFunction: { value: focalPowerFunction },
-            uBokehTexture: { type: "t", value: new THREE.TextureLoader().load(bokehTexturePath) },
+            uBokehTexture: { type: "t", value: loadBokehTexture(bokehTexturePath) },
             uDistanceAttenuation: { value: distanceAttenuation }, 
         },
 
@@ -183,7 +255,7 @@ function init() {
             uBokehStrength: { value: bokehStrength },
             uMinimumLineSize: { value: minimumLineSize },
             uFocalPowerFunction: { value: focalPowerFunction },
-            uBokehTexture: { type: "t", value: new THREE.TextureLoader().load(bokehTexturePath) },
+            uBokehTexture: { type: "t", value: loadBokehTexture(bokehTexturePath) },
             uDistanceAttenuation: { value: distanceAttenuation }, 
         },
 
@@ -204,6 +276,7 @@ function init() {
 
 
     createLinesWrapper(frames / motionBlurFrames);
+    if(useDirectFallback) visualAssetsReady = true;
 
 
     buildControls();
@@ -228,7 +301,8 @@ function render(now) {
     controls.update();
 
 
-    for(let i = 0; i < drawCallsPerFrame; i++) {
+    var activeDrawCalls = useDirectFallback ? 4 : drawCallsPerFrame;
+    for(let i = 0; i < activeDrawCalls; i++) {
         samples++;
         linesMaterial.uniforms.uBokehStrength.value = bokehStrength;
         linesMaterial.uniforms.uFocalDepth.value = cameraFocalDistance;
@@ -248,10 +322,17 @@ function render(now) {
         quadsMaterial.uniforms.uRandomVec4.value = new THREE.Vector4(Math.random() * 100, Math.random() * 100, Math.random() * 100, Math.random() * 100);
         quadsMaterial.uniforms.uDistanceAttenuation.value = distanceAttenuation;
 
-        renderer.render(scene, camera, offscreenRT);
+        if(useDirectFallback) {
+            renderer.autoClear = i === 0;
+            scene.background = new THREE.Color(backgroundColor[0], backgroundColor[1], backgroundColor[2]);
+            renderer.render(scene, camera);
+            scene.background = null;
+        } else {
+            renderer.render(scene, camera, offscreenRT);
+        }
     }
    
-    if(shaderpassf !== "") {
+    if(!useDirectFallback && shaderpassf !== "") {
         shaderPassMaterial.uniforms.uTime.value = (now * 0.001) % 1000;
         shaderPassMaterial.uniforms.uRandoms.value = new THREE.Vector4(Math.random(), Math.random(), Math.random(), Math.random());
         shaderPassMaterial.uniforms.uCameraPosition.value = new THREE.Vector3(camera.position.x, camera.position.y, camera.position.z);
@@ -259,10 +340,12 @@ function render(now) {
         renderer.render(shaderPassScene, postProcCamera, offscreenRT);    
     }
 
-    postProcQuadMaterial.uniforms.uSamples.value  = samples;
-    postProcQuadMaterial.uniforms.uExposure.value = exposure;
-    postProcQuadMaterial.uniforms.uCameraPosition.value = new THREE.Vector3(camera.position.x, camera.position.y, camera.position.z);
-    renderer.render(postProcScene, postProcCamera);
+    if(!useDirectFallback) {
+        postProcQuadMaterial.uniforms.uSamples.value  = samples;
+        postProcQuadMaterial.uniforms.uExposure.value = exposure;
+        postProcQuadMaterial.uniforms.uCameraPosition.value = new THREE.Vector3(camera.position.x, camera.position.y, camera.position.z);
+        renderer.render(postProcScene, postProcCamera);
+    }
     if(Number.isFinite(now)) visualFrameRendered = true;
     announceVisualReady();
 
@@ -298,6 +381,11 @@ function render(now) {
 
 
 function resetCanvas() {
+    if(useDirectFallback) {
+        samples = 0;
+        renderer.clear();
+        return;
+    }
     scene.background = new THREE.Color(0x000000);
     renderer.render(scene, camera, offscreenRT);
     samples = 0;

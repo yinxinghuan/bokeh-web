@@ -25,19 +25,34 @@
       <div class="focus-marks" aria-label="Focus planes"><i></i><i></i><i></i></div>
     </header>
     <section class="sleeping">
-      <button class="wake" type="button">
+      <button class="wake" type="button" disabled aria-busy="true">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 11.24V7.5a2.5 2.5 0 0 1 5 0v3.74c1.21-.81 2-2.18 2-3.74a4 4 0 1 0-8 0c0 1.56.79 2.93 2 3.74zM18.84 15.87l-4.54-2.26c-.17-.07-.35-.11-.54-.11H13v-6a1.5 1.5 0 0 0-3 0v10.74l-3.43-.72a1 1 0 0 0-1.05.49 1 1 0 0 0 .12 1.16l3.84 4.15c.37.4.89.63 1.43.63h6.55c.85 0 1.56-.6 1.74-1.42l.95-4.47a1.5 1.5 0 0 0-.8-1.92z" /></svg>
-        <span>触碰唤醒光学网</span>
+        <span>光学组件载入中…</span>
       </button>
     </section>
     <footer class="guide">
-      <p>轻触校准焦面 · 拖动旋转</p>
+      <p>正在准备光学场…</p>
       <button class="restart" type="button" hidden>重新校准</button>
     </footer>
+    <script>
+      (() => {
+        const boot = document.querySelector('.boot-bridge')
+        const label = document.querySelector('.wake span')
+        if (label && !navigator.language.toLowerCase().startsWith('zh')) {
+          label.textContent = 'Loading optical components…'
+        }
+        const guide = document.querySelector('.guide p')
+        if (guide && !navigator.language.toLowerCase().startsWith('zh')) {
+          guide.textContent = 'Preparing the optical field…'
+        }
+        if (!boot) return
+        boot.classList.add('is-ready')
+        window.setTimeout(() => boot.remove(), 420)
+      })()
+    </script>
     <script src="./libs/dependencies/three.js"></script>
     <script src="./libs/dependencies/OrbitControls.js"></script>
     <script src="./libs/dependencies/jquery.js"></script>
-    <script src="./libs/dependencies/gif.js"></script>
     <script src="./libs/globals.js"></script>
     <script src="./libs/geometries/line.js"></script>
     <script src="./libs/geometries/quad.js"></script>

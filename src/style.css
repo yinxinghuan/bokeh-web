@@ -12,9 +12,15 @@ canvas { position: fixed; inset: 0; width: 100%; height: 100%; touch-action: non
 .sleeping.is-awake { opacity: 0; pointer-events: none; }
 .wake { width: 188px; min-height: 112px; border: 1px solid rgba(247,241,234,.55); background: rgba(16,12,12,.8); color: inherit; display: grid; place-items: center; gap: 8px; padding: 18px; font: 600 16px/1.4 inherit; }
 .wake svg { width: 46px; height: 46px; fill: #f7f1ea; filter: drop-shadow(0 0 8px rgba(255,102,78,.7)); }
+.wake:disabled { opacity: .72; cursor: wait; }
+.wake:disabled svg { animation: bw-wake-loading 1.1s ease-in-out infinite alternate; }
+@keyframes bw-wake-loading { to { transform: scale(.78); filter: blur(2px) drop-shadow(0 0 8px rgba(255,102,78,.45)); } }
 .wake:active, .restart:active { transform: scale(.97); }
 .guide { bottom: max(22px, calc(env(safe-area-inset-bottom) + 12px)); text-align: center; }
 .guide p { margin: 0; font-size: 16px; line-height: 1.5; text-shadow: 0 2px 4px #100c0c; }
 .restart { pointer-events: auto; min-width: 132px; min-height: 44px; margin-top: 12px; padding: 8px 16px; border: 1px solid currentColor; background: #100c0c; color: inherit; font: inherit; }
 .is-baseline .hud, .is-baseline .guide, .is-baseline .sleeping { display: none; }
-@media (prefers-reduced-motion: reduce) { *, *::before, *::after { transition-duration: .01ms !important; } }
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { transition-duration: .01ms !important; }
+  .wake:disabled svg { animation: none; }
+}
