@@ -5,6 +5,7 @@ type LegacyWindow = Window & {
   resetCanvas: () => void
   renderer: { domElement: HTMLCanvasElement }
   onBlurryFirstFrame?: () => void
+  onBlurryFailure?: (reason: string) => void
 }
 
 const legacy = window as unknown as LegacyWindow
@@ -27,9 +28,11 @@ const focalPlanes = [
 ]
 let progress = 0
 let started = false
+let failed = false
 let gestureAttached = false
 const params = new URLSearchParams(location.search)
 const baseline = params.get('baseline') === '1'
+const compatibilityRetry = params.get('retry') === '1'
 const bootDelayMs = Math.min(5000, Math.max(0, Number(params.get('boot_delay')) || 0))
 
 restart.textContent = copy.restart
@@ -87,7 +90,26 @@ legacy.onBlurryFirstFrame = () => {
   attachCanvasGesture()
 }
 
+legacy.onBlurryFailure = () => {
+  failed = true
+  started = false
+  sleeping.classList.remove('is-awake')
+  wake.disabled = false
+  wake.removeAttribute('aria-busy')
+  wake.querySelector('span')!.textContent = locale === 'zh' ? '兼容模式重试' : 'Retry in compatibility mode'
+  guide.textContent = locale === 'zh'
+    ? '图形上下文启动失败，点按后将以兼容模式重载'
+    : 'Graphics startup failed. Tap to reload in compatibility mode.'
+}
+
 function startExperience() {
+  if (failed) {
+    const retryUrl = new URL(location.href)
+    retryUrl.searchParams.set('renderer', 'direct')
+    retryUrl.searchParams.set('retry', '1')
+    location.replace(retryUrl)
+    return
+  }
   if (started) return
   started = true
   wake.querySelector('span')!.textContent = copy.starting
@@ -103,11 +125,13 @@ function startExperience() {
   }
 }
 
-if ('PointerEvent' in window) wake.addEventListener('pointerdown', startExperience, { once: true })
-else wake.addEventListener('click', startExperience, { once: true })
+if ('PointerEvent' in window) wake.addEventListener('pointerdown', startExperience)
+else wake.addEventListener('click', startExperience)
 
 if (baseline) {
   document.body.classList.add('is-baseline')
+  startExperience()
+} else if (compatibilityRetry) {
   startExperience()
 }
 

@@ -35,11 +35,20 @@ let frames = 0;
 let visualReadySent = false;
 let visualFrameRendered = false;
 let visualAssetsReady = false;
+let blankFrameCount = 0;
+let visualFailureSent = false;
 
 function announceVisualReady() {
     if(visualReadySent || !visualFrameRendered || !visualAssetsReady) return;
     visualReadySent = true;
     if(typeof window.onBlurryFirstFrame === "function") window.onBlurryFirstFrame();
+}
+
+function announceVisualFailure(reason) {
+    if(visualFailureSent) return;
+    visualFailureSent = true;
+    document.body.dataset.bokehFailure = reason;
+    if(typeof window.onBlurryFailure === "function") window.onBlurryFailure(reason);
 }
 
 var controls = { };
@@ -49,7 +58,9 @@ function forceDirectRenderer() {
     var ua = navigator.userAgent || "";
     return params.get("renderer") === "direct"
         || /miniProgram|MicroMessenger|miniapp/i.test(ua)
-        || window.__wxjs_environment === "miniprogram";
+        || window.__wxjs_environment === "miniprogram"
+        || /Android|iPhone|iPad|iPod|Mobile/i.test(ua)
+        || (navigator.maxTouchPoints > 0 && window.matchMedia && window.matchMedia("(pointer: coarse)").matches);
 }
 
 function canRenderFloatTarget(activeRenderer) {
@@ -111,6 +122,49 @@ function loadBokehTexture(path) {
     return texture;
 }
 
+function hasVisibleDefaultFramebuffer(activeRenderer) {
+    var gl = activeRenderer.getContext();
+    if(!gl || (gl.isContextLost && gl.isContextLost())) return false;
+    var width = gl.drawingBufferWidth;
+    var height = gl.drawingBufferHeight;
+    if(width < 1 || height < 1) return false;
+    var pixel = new Uint8Array(4);
+    var points = [
+        [0.5, 0.5],
+        [0.25, 0.25],
+        [0.75, 0.25],
+        [0.25, 0.75],
+        [0.75, 0.75]
+    ];
+    try {
+        for(var i = 0; i < points.length; i++) {
+            gl.readPixels(
+                Math.min(width - 1, Math.floor(width * points[i][0])),
+                Math.min(height - 1, Math.floor(height * points[i][1])),
+                1,
+                1,
+                gl.RGBA,
+                gl.UNSIGNED_BYTE,
+                pixel
+            );
+            if(pixel[0] + pixel[1] + pixel[2] > 24) return true;
+        }
+    } catch(error) {
+        return false;
+    }
+    return false;
+}
+
+function switchToDirectFallback(reason) {
+    if(useDirectFallback) return;
+    useDirectFallback = true;
+    visualAssetsReady = true;
+    blankFrameCount = 0;
+    document.body.dataset.bokehRenderer = "direct";
+    document.body.dataset.bokehFallbackReason = reason;
+    renderer.autoClear = true;
+}
+
 function init() {    
     if(setGlobals) setGlobals();
 
@@ -129,6 +183,10 @@ function init() {
     renderer.autoClear = false;
     document.body.appendChild(renderer.domElement);
     canvas = renderer.domElement;
+    canvas.addEventListener("webglcontextlost", function(event) {
+        event.preventDefault();
+        announceVisualFailure("context-lost");
+    });
     useDirectFallback = !canRenderFloatTarget(renderer);
     document.body.dataset.bokehRenderer = useDirectFallback ? "direct" : "accumulation";
 
@@ -346,7 +404,16 @@ function render(now) {
         postProcQuadMaterial.uniforms.uCameraPosition.value = new THREE.Vector3(camera.position.x, camera.position.y, camera.position.z);
         renderer.render(postProcScene, postProcCamera);
     }
-    if(Number.isFinite(now)) visualFrameRendered = true;
+    if(!visualFrameRendered) {
+        if(Number.isFinite(now) && hasVisibleDefaultFramebuffer(renderer)) {
+            visualFrameRendered = true;
+            blankFrameCount = 0;
+        } else {
+            blankFrameCount++;
+            if(blankFrameCount >= 6 && !useDirectFallback) switchToDirectFallback("blank-accumulation");
+            else if(blankFrameCount >= 24 && useDirectFallback) announceVisualFailure("blank-direct");
+        }
+    }
     announceVisualReady();
 
 

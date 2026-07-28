@@ -17,7 +17,7 @@
 
 ## 3. 核心模块
 
-`window.startBlurry()` 在首次明确触碰时才创建原版 WebGL renderer，避免页面加载即占用 GPU。初始化会创建 2×2 float framebuffer 并检查 `FRAMEBUFFER_COMPLETE`，不能只相信扩展名称。完整时保留上游浮点累积；Mini App UA、`?renderer=direct` 调试入口或 framebuffer 不完整时，改为每帧直接绘制同一场景 4 次，并用程序化五边形纹理顶住图片解码延迟。上游循环在页面隐藏时暂停绘制，移动端像素比上限为 1.5；完整路径在宽度不超过 390px 时每帧累积 12 个样本，否则为 32 个。相机仍由原版 OrbitControls 驱动。
+`window.startBlurry()` 在首次明确触碰时才创建原版 WebGL renderer，避免页面加载即占用 GPU。初始化会创建 2×2 float framebuffer 并检查 `FRAMEBUFFER_COMPLETE`，不能只相信扩展名称。完整时保留上游浮点累积；移动端、Mini App UA、`?renderer=direct` 调试入口或 framebuffer 不完整时，改为每帧直接绘制同一场景 4 次，并用程序化五边形纹理顶住图片解码延迟。上游循环在页面隐藏时暂停绘制，移动端像素比上限为 1.5；完整路径在宽度不超过 390px 时每帧累积 12 个样本，否则为 32 个。相机仍由原版 OrbitControls 驱动。累积路径只有在默认 framebuffer 的实读像素非黑后才报告首帧就绪；连续黑帧会切入直接渲染，WebGL 上下文丢失则保留休眠面并提供一次点按即可重载、自动启动的兼容模式。
 
 `?baseline=1` 自动启动固定 v5 场景并隐藏产品 HUD，用于与上游机械对照；默认入口才启用三焦面闭环。
 

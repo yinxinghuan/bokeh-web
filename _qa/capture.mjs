@@ -140,6 +140,75 @@ try {
     await page.close()
   }
 
+  const fallbackPage = await browser.newPage({ viewport: { width: 390, height: 844 } })
+  await blockGuestShell(fallbackPage)
+  fallbackPage.on('pageerror', (error) => errors.push(`automatic fallback: ${error.message}`))
+  await fallbackPage.addInitScript(() => {
+    const original = WebGLRenderingContext.prototype.readPixels
+    let remainingBlankReads = 30
+    WebGLRenderingContext.prototype.readPixels = function (...args) {
+      if (remainingBlankReads > 0) {
+        remainingBlankReads -= 1
+        const pixels = args[6]
+        if (pixels?.fill) pixels.fill(0)
+        return
+      }
+      return original.apply(this, args)
+    }
+  })
+  await fallbackPage.goto('http://127.0.0.1:4189/', { waitUntil: 'domcontentloaded' })
+  await fallbackPage.locator('.wake').click()
+  await fallbackPage.waitForFunction(() => document.body.dataset.visualReady === 'true')
+  await fallbackPage.waitForTimeout(500)
+  await fallbackPage.screenshot({ path: path.join(output, '390x844-auto-fallback-awake.png') })
+  const fallbackState = await fallbackPage.evaluate(() => ({
+    renderer: document.body.dataset.bokehRenderer,
+    reason: document.body.dataset.bokehFallbackReason,
+  }))
+  if (fallbackState.renderer !== 'direct' || fallbackState.reason !== 'blank-accumulation') {
+    errors.push(`automatic fallback: invalid state ${JSON.stringify(fallbackState)}`)
+  }
+  await fallbackPage.close()
+
+  const contextLossPage = await browser.newPage({
+    viewport: { width: 390, height: 844 },
+    hasTouch: true,
+    isMobile: true,
+  })
+  await blockGuestShell(contextLossPage)
+  contextLossPage.on('pageerror', (error) => errors.push(`context loss: ${error.message}`))
+  await contextLossPage.goto('http://127.0.0.1:4189/', { waitUntil: 'domcontentloaded' })
+  await contextLossPage.locator('.wake').tap()
+  await contextLossPage.waitForFunction(() => document.body.dataset.visualReady === 'true')
+  const canLoseContext = await contextLossPage.evaluate(() => {
+    const canvas = document.querySelector('canvas')
+    const gl = canvas?.getContext('webgl') || canvas?.getContext('webgl2')
+    const extension = gl?.getExtension('WEBGL_lose_context')
+    extension?.loseContext()
+    return Boolean(extension)
+  })
+  if (!canLoseContext) {
+    errors.push('context loss: WEBGL_lose_context unavailable')
+  } else {
+    await contextLossPage.waitForFunction(() => document.body.dataset.bokehFailure === 'context-lost')
+    await contextLossPage.waitForFunction(() => getComputedStyle(document.querySelector('.sleeping')).opacity === '1')
+    await contextLossPage.screenshot({ path: path.join(output, '390x844-context-lost.png') })
+    const contextLossState = await contextLossPage.evaluate(() => ({
+      sleepingOpacity: getComputedStyle(document.querySelector('.sleeping')).opacity,
+      wakeDisabled: document.querySelector('.wake')?.disabled,
+      wakeLabel: document.querySelector('.wake span')?.textContent,
+    }))
+    if (contextLossState.sleepingOpacity !== '1' || contextLossState.wakeDisabled || !contextLossState.wakeLabel?.includes('compatibility')) {
+      errors.push(`context loss: invalid recovery ${JSON.stringify(contextLossState)}`)
+    }
+    await contextLossPage.locator('.wake').tap()
+    await contextLossPage.waitForURL((url) => url.searchParams.get('renderer') === 'direct')
+    await contextLossPage.waitForFunction(() => document.body.dataset.visualReady === 'true')
+    const retryState = await contextLossPage.evaluate(() => document.body.dataset.bokehRenderer)
+    if (retryState !== 'direct') errors.push(`context loss: retry renderer was ${retryState}`)
+  }
+  await contextLossPage.close()
+
   const baselinePage = await browser.newPage({ viewport: { width: 390, height: 844 } })
   await blockGuestShell(baselinePage)
   baselinePage.on('pageerror', (error) => errors.push(`baseline: ${error.message}`))
